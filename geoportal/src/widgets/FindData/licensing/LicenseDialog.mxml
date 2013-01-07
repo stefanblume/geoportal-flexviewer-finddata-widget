@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+///////////////////////////////////////////////////////////////////////////
+// Copyright (c) 2010-2011 Esri. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+///////////////////////////////////////////////////////////////////////////
+-->
+
+<s:BorderContainer xmlns:fx="http://ns.adobe.com/mxml/2009"
+				   xmlns:s="library://ns.adobe.com/flex/spark"
+				   xmlns:mx="library://ns.adobe.com/flex/mx"
+				   width="100%" height="100%"
+				   cornerRadius="10"
+				   creationComplete="creationCompleteHandler(event)">
+	<s:filters>
+		<s:GlowFilter alpha="0.8"
+					  blurX="50"
+					  blurY="50"
+					  color="0xFFFFFF"
+					  quality="{BitmapFilterQuality.MEDIUM}"
+					  strength="1"/>
+	</s:filters>
+	<fx:Script>
+		<![CDATA[
+        import widgets.FindData.licensing.LicenseButton;
+        import com.esri.viewer.components.HTMLPopupManager;
+        import com.esri.viewer.utils.Hashtable;
+
+        import flash.events.MouseEvent;
+
+        import flash.filters.BitmapFilterQuality;
+
+        import flashx.textLayout.conversion.TextConverter;
+
+        import mx.controls.Alert;
+
+        import mx.controls.LinkButton;
+        import mx.core.FlexGlobals;
+        import mx.events.CloseEvent;
+        import mx.events.FlexEvent;
+
+        import widgets.FindData.*;
+
+        [Bindable]
+        public var txtareaWidth:Number = 500;
+
+        [Bindable]
+        public var txtareaHeight:Number = 500;
+
+        private var callback:Function;
+        private var licenses:Hashtable;
+        private var identity:String;
+        private var wssUrl:String;
+        private var securityServiceUrl:String;
+        private var requestedUrl:String ="empty";
+        private var serviceTitle:String ="";
+
+        public function showLicenseDialog(licenses:Hashtable, callback:Function, width:Number = 500, height:Number = 500, modal:Boolean = true, identity:String = "", requestedUrl:String = "", wssUrl:String = "", securityServiceUrl:String = "", serviceTitle:String = ""):void {
+            //Alert.show("showLicenseDialog");
+            txtareaHeight = height;
+            txtareaWidth = width;
+            this.callback = callback;
+            this.licenses = licenses;
+            this.identity = identity;
+            this.wssUrl = wssUrl;
+            this.securityServiceUrl = securityServiceUrl;
+            this.requestedUrl = requestedUrl;
+            this.serviceTitle = serviceTitle;
+
+            var parent:Sprite = Sprite(FlexGlobals.topLevelApplication);
+
+            HTMLPopupManager.addPopUp(this, parent, modal);
+        }
+
+        private function parseProductId(productUrn:String):String {
+            var lastIndexOfCollon:int = productUrn.lastIndexOf(":") + 1;
+            var productId:String = productUrn.substr(lastIndexOfCollon, productUrn.length);
+            var s:String = "LICENSE_";
+            if (productId.indexOf(s) > -1) productId = productId.substring(productId.indexOf(s) + s.length);
+            productId = productId.replace(/_/g, " ");
+            return productId;
+        }
+
+        private function close(event:Event):void {
+            HTMLPopupManager.removePopUp(this);
+            dispatchEvent(new CloseEvent(CloseEvent.CLOSE));
+        }
+
+        protected function creationCompleteHandler(event:FlexEvent):void {
+            //Alert.show("creationCompleteHandler");
+            setStyle("backgroundColor", getStyle("contentBackgroundColor"));
+            setStyle("backgroundAlpha", FlexGlobals.topLevelApplication.getStyle("backgroundAlpha"));
+            try {
+                var licIds:Array = licenses.getKeySet();
+                for each (var licId:String in licIds) {
+                    try {
+                        var lic:Object = licenses.find(licId);
+                        var lbtn:LicenseButton = new LicenseButton();
+                        lbtn.license = lic;
+                        lbtn.label = parseProductId(lic.licenseReference.SAMLAttributes["urn:opengeospatial:ows4:geodrm:ProductID"]);
+                        lbtn.addEventListener(MouseEvent.CLICK, acceptClickHandler);
+                        licenseGroup.addElement(lbtn);
+                    } catch (error:Error) {
+                        Alert.show("error in creationCompleteHandler: licId"+licId+" " + error.getStackTrace());
+                    }
+                }
+            } catch (error:Error) {
+                Alert.show("error in creationCompleteHandler: " + error.getStackTrace());
+            }
+
+            if (identity && identity != "") {
+                //Alert.show("createLicenseBtn");
+                var createLicenseBtn:LinkButton = new LinkButton();
+                createLicenseBtn.label = resourceManager.getString('gptStrings', 'finddata.createNewLicenseCommand');
+                createLicenseBtn.addEventListener(MouseEvent.CLICK, startExternalLicensingFlow);
+                licenseGroup.addElement(createLicenseBtn);
+            }
+
+        }
+
+        protected function acceptClickHandler(event:MouseEvent):void {
+            var lbtn:LicenseButton = event.currentTarget as LicenseButton;
+            if (lbtn && lbtn != null) {
+
+                callback(true, lbtn.license);
+            }
+            HTMLPopupManager.removePopUp(this);
+            dispatchEvent(new CloseEvent(CloseEvent.CLOSE));
+        }
+
+        protected function cancelClickHandler(event:MouseEvent):void {
+            callback(false, null);
+            HTMLPopupManager.removePopUp(this);
+            dispatchEvent(new CloseEvent(CloseEvent.CLOSE));
+        }
+
+
+        protected function startExternalLicensingFlow(event:MouseEvent):void {
+            // TODO: add absolute URL  // this allows only running it on the same host
+            var createLicReq:LicenseClientRequest = new LicenseClientRequest("/licenseshop/licenseTemplate_list.jsf");
+            createLicReq.compileReturnUrl(securityServiceUrl, serviceTitle, requestedUrl);
+            createLicReq.setParams(identity, wssUrl);
+            //Alert.show("identity: "+identity);
+            navigateToURL(createLicReq.getUrlRequest());
+            HTMLPopupManager.removePopUp(this);
+            dispatchEvent(new CloseEvent(CloseEvent.CLOSE));
+        }
+
+
+
+        ]]>
+	</fx:Script>
+	<!-- doc reference http://help.adobe.com/en_US/FlashPlatform/reference/actionscript/3/flashx/textLayout/conversion/TextConverter.html#TEXT_FIELD_HTML_FORMAT -->
+	<s:RectangularDropShadow id="dropShadow"
+							 left="0" right="0" top="0" bottom="0"
+							 alpha="0.32"
+							 angle="90"
+							 blRadius="10"
+							 blurX="20"
+							 blurY="20"
+							 brRadius="10"
+							 distance="25"/>
+	<s:VGroup id="scrollerWrapper" horizontalAlign="center" paddingBottom="10" paddingTop="10">
+		<s:Label id="lbl" text="{resourceManager.getString('gptStrings','finddata.chooseOneLicense')}"/>
+			<s:VGroup id="licenseGroup" horizontalAlign="left">
+			</s:VGroup>
+		<s:Button id="closeButton" click="cancelClickHandler(event)" label="{resourceManager.getString('gptStrings','finddata.confirmTermsButtonCancel')}" />
+	</s:VGroup>
+</s:BorderContainer>
+
